@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {IERC20} from "./FreelanceSystem_v2.sol";
+import {IERC20} from "./FreelanceSystem.sol";
 
 /// @dev Minimal mintable USDC mock (6 decimals) for local tests and Sepolia deploy.
 contract MockUSDC is IERC20 {
