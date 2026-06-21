@@ -526,6 +526,10 @@ contract ArbitratorPanel {
     JobRegistry public registry;
     PlatformTreasury public treasury;
 
+    // Delegated ops — admin giữ full quyền; ARBITRATOR_MANAGER có thể joinPool thay người khác
+    uint256 public constant ROLE_ARBITRATOR_MANAGER = 1;
+    mapping(address => uint256) public roles;
+
     // Authorized callers (EscrowVault)
     mapping(address => bool) public authorizedContracts;
 
@@ -615,6 +619,8 @@ contract ArbitratorPanel {
     error AppealAlreadyFiled();
 
     event AdminTransferred(address indexed previousAdmin, address indexed newAdmin);
+    event RoleGranted(address indexed account, uint256 role);
+    event RoleRevoked(address indexed account, uint256 role);
     event ArbitratorJoined(address indexed arbitrator);
     event ArbitratorLeft(address indexed arbitrator);
     event DisputeSetup(uint256 indexed jobId, address[] arbitrators);
@@ -663,9 +669,32 @@ contract ArbitratorPanel {
         emit AdminTransferred(previous, newAdmin);
     }
 
+    function grantRole(address account, uint256 role) external {
+        if (msg.sender != admin) revert OnlyAdmin();
+        roles[account] |= role;
+        emit RoleGranted(account, role);
+    }
+
+    function revokeRole(address account, uint256 role) external {
+        if (msg.sender != admin) revert OnlyAdmin();
+        roles[account] &= ~role;
+        emit RoleRevoked(account, role);
+    }
+
+    function hasRole(
+        address account,
+        uint256 role
+    ) external view returns (bool) {
+        return account == admin || (roles[account] & role) != 0;
+    }
+
     // Điều 22.1: join pool
     function joinPool(address _arb) external {
-        if (msg.sender != admin && msg.sender != _arb) revert Unauthorized();
+        if (
+            msg.sender != admin &&
+            msg.sender != _arb &&
+            (roles[msg.sender] & ROLE_ARBITRATOR_MANAGER) == 0
+        ) revert Unauthorized();
         if (isInPool[_arb]) revert AlreadyInPool();
         if (reputationStore.getScore(_arb) < MIN_SCORE)
             revert InsufficientScore();
@@ -1048,6 +1077,11 @@ contract EscrowVault {
     ArbitratorPanel public panel;
     ReputationStore public reputation;
 
+    // Delegated ops — tách quyền pause / force resolve khỏi admin multisig
+    uint256 public constant ROLE_PAUSER = 1;
+    uint256 public constant ROLE_FORCE_RESOLVER = 2;
+    mapping(address => uint256) public roles;
+
     mapping(uint256 => uint256) public disputeFees;
     mapping(uint256 => address) public disputeInitiator;
     mapping(uint256 => bool) public disputeEverRaised;
@@ -1091,9 +1125,12 @@ contract EscrowVault {
     // FIX 1: Emergency Pause errors & events
     error ContractPaused();
     error OnlyAdmin();
+    error Unauthorized();
     error InvalidAdminAddress();
 
     event AdminTransferred(address indexed previousAdmin, address indexed newAdmin);
+    event RoleGranted(address indexed account, uint256 role);
+    event RoleRevoked(address indexed account, uint256 role);
     event EmergencyPauseSet(bool paused, address indexed by);
     event AdminForceResolved(
         uint256 indexed jobId,
@@ -1166,11 +1203,33 @@ contract EscrowVault {
         emit AdminTransferred(previous, newAdmin);
     }
 
+    function grantRole(address account, uint256 role) external {
+        if (msg.sender != admin) revert OnlyAdmin();
+        roles[account] |= role;
+        emit RoleGranted(account, role);
+    }
+
+    function revokeRole(address account, uint256 role) external {
+        if (msg.sender != admin) revert OnlyAdmin();
+        roles[account] &= ~role;
+        emit RoleRevoked(account, role);
+    }
+
+    function hasRole(
+        address account,
+        uint256 role
+    ) external view returns (bool) {
+        return account == admin || (roles[account] & role) != 0;
+    }
+
     // FIX 1: Admin kích hoạt Emergency Pause — Điều 4, Điều 9
     // Khi paused: deposit, approve, raiseDispute, fileAppeal đều bị chặn
     // Tiền đang trong escrow được bảo toàn — không ai rút được
     function setPaused(bool _paused) external {
-        if (msg.sender != admin) revert OnlyAdmin();
+        if (
+            msg.sender != admin &&
+            (roles[msg.sender] & ROLE_PAUSER) == 0
+        ) revert Unauthorized();
         paused = _paused;
         emit EmergencyPauseSet(_paused, msg.sender);
     }
@@ -1182,7 +1241,10 @@ contract EscrowVault {
         uint256 _jobId,
         ArbitratorPanel.DisputeChoice _decision
     ) external {
-        if (msg.sender != admin) revert OnlyAdmin();
+        if (
+            msg.sender != admin &&
+            (roles[msg.sender] & ROLE_FORCE_RESOLVER) == 0
+        ) revert Unauthorized();
         JobRegistry.Job memory job = registry.getJob(_jobId);
         if (job.status != JobRegistry.JobStatus.DISPUTED) revert WrongStatus();
 
