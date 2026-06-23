@@ -1,0 +1,12 @@
+﻿.env
+.env.local
+.env.*.local
+node_modules/
+artifacts/
+cache/
+broadcast/
+coverage/
+typechain-types/
+*.pem
+*.log
+.DS_Store
