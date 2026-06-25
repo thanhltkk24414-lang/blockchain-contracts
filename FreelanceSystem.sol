@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import "./DisputeTimings.sol";
+
 // ==========================================
 // INTERFACE CHUẨN ERC20 (USDC)
 // ==========================================
@@ -540,18 +542,7 @@ contract ArbitratorPanel {
         SPLIT_50_50
     }
 
-    // Timeline (Kleros-style phased dispute — Điều 20 & 22.3):
-    // 0   → 72h  : initial evidence
-    // 72  → 120h : rebuttal evidence (48h)
-    // 120 → 144h : commit vote (24h)
-    // 144 → 168h : reveal vote (24h)
-    uint256 private constant EVIDENCE_INITIAL_END = 72 hours;
-    uint256 private constant EVIDENCE_REBUTTAL_END = 120 hours;
-    uint256 private constant COMMIT_START = 120 hours;
-    uint256 private constant COMMIT_END = 144 hours;
-    uint256 private constant REVEAL_START = 144 hours;
-    uint256 private constant REVEAL_END = 168 hours;
-    uint256 private constant APPEAL_WINDOW = 72 hours;
+    // Timeline — see DisputeTimings.sol (prod: hours; demo/Sepolia: minutes)
     uint256 private constant SLASH_AMOUNT = 5_000_000; // 5 USDC
     uint256 private constant MIN_STAKE = 50_000_000; // 50 USDC
     uint256 private constant MIN_SCORE = 80;
@@ -752,7 +743,7 @@ contract ArbitratorPanel {
     function startAppealRound(uint256 _jobId) external onlyAuthorized {
         Dispute storage d = disputes[_jobId];
         if (d.round != 1 || !d.isResolved) revert AppealNotAllowed();
-        if (block.timestamp > d.resultAt + APPEAL_WINDOW)
+        if (block.timestamp > d.resultAt + DisputeTimings.APPEAL_WINDOW)
             revert AppealWindowClosed();
 
         // Lưu arbitrator vòng 1 vào danh sách loại trừ
@@ -788,7 +779,7 @@ contract ArbitratorPanel {
             revert NotAParty();
         if (job.status != JobRegistry.JobStatus.DISPUTED)
             revert JobNotDisputed();
-        if (block.timestamp > uint256(d.createdAt) + EVIDENCE_REBUTTAL_END)
+        if (block.timestamp > uint256(d.createdAt) + DisputeTimings.EVIDENCE_REBUTTAL_END)
             revert EvidenceWindowClosed();
 
         evidences[_jobId].push(
@@ -863,8 +854,8 @@ contract ArbitratorPanel {
         Dispute storage d = disputes[_jobId];
 
         // Commit window: 120h → 144h (sau khi evidence đóng lúc 120h)
-        uint256 start = uint256(d.createdAt) + COMMIT_START;
-        uint256 end_ = uint256(d.createdAt) + COMMIT_END;
+        uint256 start = uint256(d.createdAt) + DisputeTimings.COMMIT_START;
+        uint256 end_ = uint256(d.createdAt) + DisputeTimings.COMMIT_END;
         if (block.timestamp < start || block.timestamp > end_)
             revert WrongPhase();
 
@@ -887,8 +878,8 @@ contract ArbitratorPanel {
     ) external {
         Dispute storage d = disputes[_jobId];
 
-        uint256 start = uint256(d.createdAt) + REVEAL_START;
-        uint256 end_ = uint256(d.createdAt) + REVEAL_END;
+        uint256 start = uint256(d.createdAt) + DisputeTimings.REVEAL_START;
+        uint256 end_ = uint256(d.createdAt) + DisputeTimings.REVEAL_END;
         if (block.timestamp < start || block.timestamp > end_)
             revert WrongPhase();
 
@@ -932,7 +923,7 @@ contract ArbitratorPanel {
     // Điều 22.3: slash arbitrator không reveal — bất kỳ ai trigger sau 168h
     function slashNoReveal(uint256 _jobId) external {
         Dispute storage d = disputes[_jobId];
-        if (block.timestamp <= uint256(d.createdAt) + REVEAL_END)
+        if (block.timestamp <= uint256(d.createdAt) + DisputeTimings.REVEAL_END)
             revert WrongPhase();
         if (d.isResolved) revert AlreadyResolved();
         _slashNoReveal(_jobId, d);
@@ -942,7 +933,7 @@ contract ArbitratorPanel {
     function finalizeDispute(uint256 _jobId) external returns (DisputeChoice) {
         Dispute storage d = disputes[_jobId];
         if (d.isResolved) revert AlreadyResolved();
-        if (block.timestamp <= uint256(d.createdAt) + REVEAL_END)
+        if (block.timestamp <= uint256(d.createdAt) + DisputeTimings.REVEAL_END)
             revert VotingStillActive();
 
         _slashNoReveal(_jobId, d);
@@ -1103,7 +1094,6 @@ contract EscrowVault {
     uint256 private constant DISPUTE_FEE_CAP = 50_000_000; // 50 USDC
     uint256 private constant REVIEW_PERIOD = 7 days;
     uint256 private constant START_WINDOW = 72 hours;
-    uint256 private constant APPEAL_WINDOW = 72 hours;
     uint256 private constant APPEAL_FEE_NUM = 130; // 1.3× Dispute Fee
     uint256 private constant APPEAL_FEE_DEN = 100;
 
@@ -1416,7 +1406,7 @@ contract EscrowVault {
         if (appealFiled[_jobId]) revert AppealAlreadyFiled();
         if (!panel.isVotingFinalized(_jobId)) revert VotingNotFinalized();
         if (panel.getDisputeRound(_jobId) != 1) revert AppealNotAllowed();
-        if (block.timestamp > panel.getResultAt(_jobId) + APPEAL_WINDOW)
+        if (block.timestamp > panel.getResultAt(_jobId) + DisputeTimings.APPEAL_WINDOW)
             revert AppealWindowClosed();
 
         uint256 appealFee;
@@ -1453,7 +1443,7 @@ contract EscrowVault {
         uint40 resultAt = panel.getResultAt(_jobId);
 
         if (round == 1 && !appealFiled[_jobId]) {
-            if (block.timestamp < uint256(resultAt) + APPEAL_WINDOW)
+            if (block.timestamp < uint256(resultAt) + DisputeTimings.APPEAL_WINDOW)
                 revert AppealWindowActive();
         }
         if (appealFiled[_jobId] && round != 2) revert VotingNotFinalized();
