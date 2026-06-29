@@ -4,7 +4,7 @@
 
 Submodule của monorepo [`Blockchain`](../README.md). Source chính: `FreelanceSystem.sol`, `MockUSDC.sol`.
 
-**Cập nhật:** 2026-06-28
+**Cập nhật:** 2026-06-30
 
 ---
 
@@ -57,7 +57,7 @@ npm test                 # prod dispute timings
 ```bash
 npm run deploy:sepolia        # DisputeTimings.demo (phút)
 npm run deploy:sepolia:prod   # DisputeTimings.prod (giờ)
-npm run seed:arbitrators      # 5 arbitrators vào pool
+npm run seed:arbitrators      # 5+ arbitrators; ≥10 recommended for appeal demo
 npm run verify:sepolia
 ```
 
@@ -94,4 +94,5 @@ Chi tiết: [docs/guides/chainlink-integration-vi.md](../docs/guides/chainlink-i
 
 - [Contract interaction guide](../docs/guides/contract-interaction.md)
 - [System design](../docs/guides/system-design-vi.md)
+- [Platform mechanisms](../docs/guides/platform-mechanisms-vi.md)
 - [Dispute vs Kleros](../docs/guides/dispute-kleros-comparison-vi.md)
